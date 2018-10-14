@@ -54,7 +54,9 @@ def validate_configs(configs):
     assert configs.min_feature_level <= configs.max_feature_level, 'max_feature_level must be atleast min_feature_level'
     assert configs.max_feature_level <= 7, 'max_feature_level must be 7 or less'
 
-    # TODO: Determine the minimum bounds of each variable
+    # TODO: Make configs more flexible after proof of concept
+    assert configs.max_feature_level == 7, 'max_feature_level fixed at 7'
+    assert configs.min_feature_level <= 5, 'max min_feature_level fixed at 5'
 
     configs.num_anchors = len(configs.anchor_ratios) * len(configs.anchor_scales)
 
