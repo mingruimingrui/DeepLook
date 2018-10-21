@@ -11,9 +11,8 @@ from ._backbone import (
     get_backbone_channel_sizes
 )
 
-from ._deep_look import (
-    FeaturePyramidNetwork
-)
+from ._feature_pyramid_network import FeaturePyramidNetwork
+from ._object_finder_network import ObjectFinderNetwork
 
 
 class DeepLook(torch.nn.Module):
@@ -54,30 +53,33 @@ class DeepLook(torch.nn.Module):
             feature_size=self.configs['pyramid_feature_size']
         )
 
-        self.compute_anchors = ComputeAnchors(
-            min_feature_level=self.configs['min_feature_level'],
-            max_feature_level=self.configs['max_feature_level'],
-            size_mult=self.configs['anchor_size_mult'],
-            stride_mult=self.configs['anchor_stride_mult'],
-            ratios=self.configs['anchor_ratios'],
-            scales=self.configs['anchor_scales']
+        self.shared_conv_model = SharedConvModel(
+            input_feature_size=self.configs['pyramid_feature_size'],
+            feature_size=self.configs['shared_conv_feature_size'],
+            num_layers=self.configs['shared_conv_num_layers']
         )
 
-        self.regression_submodule = DefaultRegressionModel(
-            num_anchors=self.confgs['num_anchors'],
-            pyramid_feature_size=self.configs['pyramid_feature_size'],
-            feature_size=self.configs['regression_feature_size'],
-            num_layers=self.configs['regression_num_layers']
+        if self.configs['shared_conv_num_layers'] > 0:
+            shared_conv_output_size = self.configs['shared_conv_feature_size']
+        else:
+            shared_conv_output_size = self.configs['pyramid_feature_size']
+
+        self.ofn = ObjectFinderNetwork(
+            input_feature_size=shared_conv_output_size,
+            feature_size=self.configs['finder_feature_size'],
+            num_layers=self.configs['finder_num_layers']
         )
 
-        self.classification_submodule = DefaultClassificationModel(
-            num_classes=self.configs['num_classes'],
-            num_anchors=self.confgs['num_anchors'],
-            pyramid_feature_size=self.configs['pyramid_feature_size'],
-            feature_size=self.configs['classification_feature_size'],
-            num_layers=self.configs['classification_feature_size_num_layers'],
-            prior_probability=0.01
-        )
+        self.ofn_loss_fn
+
+        # self.classification_model = ClassificationModel()
+        #
+        # self.regression_model = RegressionModel()
+
+    # def _recursive_forward(self, features):
+    #     if self.training:
+    #         for level in range(self.configs['max_feature_level'], self3.configs['min_feature_level'] - 1, -1):
+    #             self.ofn(features[level])
 
     def forward(self, image_batch, annotations_batch=None):
         # if self.training:
@@ -87,7 +89,19 @@ class DeepLook(torch.nn.Module):
         batch_size = image_batch_shape[0]
         image_hw = image_batch_shape[-2:]
 
+        # Similar to the retinanet, generate multi level features with FPN
         backbone_output = self.backbone(image_batch)
-        features = self.fpn.forward(*backbone_output)
+        features = self.fpn(*backbone_output)
+
+        if self.configs['shared_conv_num_layers'] > 0:
+            for level, feature in features.items():
+                features[level] = self.shared_conv_model(feature)
+
+        found_object_pos = {}
+        for level, feature in features.items():
+            found_object_pos[level] = self.ofn[feature]
+
+        if self.training:
+            self.loss_fn =
 
         return None

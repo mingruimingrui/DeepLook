@@ -9,30 +9,58 @@ def meshgrid2d(x, y):
     return xx, yy
 
 
-def compute_overlap(a, b):
+def compute_area(a):
+    """
+    Parameters
+    ----------
+    a: (N, 4) Tensor
+    ----------
+    """
+    return (a[:, 2] - a[:, 0]) * (a[:, 3] - a[:, 1])
+
+
+def compute_overlap(a, b, type='union'):
     """
     Parameters
     ----------
     a: (N, 4) Tensor
     b: (K, 4) Tensor
+    type: one of the following
+        'union' - intersect(A, B) / union(A, B)
+        'intersect' - intersect(A, B)
+        'intersectA' - intersect(A, B) / area(A)
+        'intersectB' - intersect(A, B) / area(B)
     Returns
     -------
     overlaps: (N, K) Tensor of overlap between boxes and query_boxes
     """
-    area = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
-
-    iw = torch.min(a[:, 2:3], b[:, 2]) - torch.max(a[:, 0:1], b[:, 0])
-    ih = torch.min(a[:, 3:4], b[:, 3]) - torch.max(a[:, 1:2], b[:, 1])
+    iw = torch.min(a[:, 2][:, None], b[:, 2][None, :]) - torch.max(a[:, 0][:, None], b[:, 0][None, :])
+    ih = torch.min(a[:, 3][:, None], b[:, 3][None, :]) - torch.max(a[:, 1][:, None], b[:, 1][None, :])
 
     iw = torch.clamp(iw, min=0)
     ih = torch.clamp(ih, min=0)
 
-    ua = (a[:, 2:3] - a[:, 0:1]) * (a[:, 3:4] - a[:, 1:2]) + area - iw * ih
-    ua = torch.clamp(ua, min=1e-15)
-
     intersection = iw * ih
 
-    return intersection / ua
+    if type == 'union':
+        area_a = compute_area(a)
+        area_b = compute_area(b)
+        union = area_a[:, None] + area_b[None, :] - intersection
+        return intersection / union
+
+    elif type == 'intersect':
+        return intersection
+
+    elif type == 'intersectA':
+        area_a = compute_area(a)
+        return intersection / area_a[:, None]
+
+    elif type == 'intersectB':
+        area_b = compute_area(b)
+        return intersection / area_b[None, :]
+
+    else:
+        raise ValueError('type {} is invalid'.format(type))
 
 
 def generate_anchors_at_window(
@@ -45,9 +73,9 @@ def generate_anchors_at_window(
     reference window
     """
     if not isinstance(ratios, torch.Tensor):
-        ratios = torch.from_numpy(ratios).float()
+        ratios = torch.Tensor(ratios).float()
     if not isinstance(scales, torch.Tensor):
-        scales = torch.from_numpy(scales).float()
+        scales = torch.Tensor(scales).float()
 
     num_ratios = len(ratios)
     num_scales = len(scales)
@@ -144,7 +172,7 @@ def bbox_transform_inv(boxes, deltas, mean, std):
     return pred_boxes
 
 
-def anchor_targets_bbox(
+def map_annotations_to_anchors(
     anchors,
     annotations,
     num_classes,
@@ -152,7 +180,7 @@ def anchor_targets_bbox(
     negative_overlap=0.4,
     positive_overlap=0.5
 ):
-    """ Generate anchor targets for bbox detection.
+    """ Maps the relevant annotation to each anchor
     Args
         anchors: torch.Tensor of annotations of shape (N, 4) for (x1, y1, x2, y2).
         annotations: torch.Tensor of shape (N, 5) for (x1, y1, x2, y2, label).
@@ -171,7 +199,7 @@ def anchor_targets_bbox(
 
     if annotations.shape[0] > 0:
         # obtain indices of gt annotations with the greatest overlap
-        overlaps             = compute_overlap(anchors, annotations)
+        overlaps             = compute_overlap(anchors, annotations, type='union')
         argmax_overlaps_inds = torch.argmax(overlaps, dim=1)
         max_overlaps         = overlaps[range(overlaps.shape[0]), argmax_overlaps_inds]
 

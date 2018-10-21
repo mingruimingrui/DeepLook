@@ -16,8 +16,8 @@ _c.num_classes = None   # int, 1 or greater
 _c.backbone        = 'resnet50'
 _c.freeze_backbone = False
 
-_c.min_feature_level = 1  # int, between 1-7 inclusive, equal or smaller than max_feature_level
-_c.max_feature_level = 7  # int, between 1-7 inclusive, equal or larger than min_feature_level
+_c.min_feature_level = 2  # int, between 2-7 inclusive, equal or smaller than max_feature_level
+_c.max_feature_level = 7  # int, between 2-7 inclusive, equal or larger than min_feature_level
 _c.pyramid_feature_size   = 256   # int, 1 or greater
 
 _c.anchor_size_mult   = 4.0  # multiplier for anchor size, at feature level n, anchor size will be (2 ** n) * mult
@@ -26,10 +26,16 @@ _c.anchor_stride_mult = 1.0  # multiplier for anchor stride, at feature level n,
 _c.anchor_ratios  = [0.5, 1., 2.]
 _c.anchor_scales  = [2. ** 0., 2. ** (1. / 3.), 2. ** (2. / 3.)]
 
-_c.regression_num_layers   = 2  # int, 1 or greater
+_c.shared_conv_num_layers   = 2    # int, 0 or greater
+_c.shared_conv_feature_size = 256  # Shared conv layers used to extract features from PX
+
+_c.finder_num_layers   = 2    # int, 0 or greater
+_c.finder_feature_size = 256  # Finder model used to find location where objects exist
+
+_c.regression_num_layers   = 2  # int, 0 or greater
 _c.regression_feature_size = 256  # Regression model internal channel size
 
-_c.classification_num_layers   = 2  # int, 1 or greater
+_c.classification_num_layers   = 2  # int, 0 or greater
 _c.classification_feature_size = 256  # Classification model internal channel size
 
 _c.apply_nms       = True  # If True, nms will be applied on detections, won't if False
@@ -53,10 +59,6 @@ def validate_configs(configs):
     assert configs.min_feature_level >= 1, 'min_feature_level must be 1 or greater'
     assert configs.min_feature_level <= configs.max_feature_level, 'max_feature_level must be atleast min_feature_level'
     assert configs.max_feature_level <= 7, 'max_feature_level must be 7 or less'
-
-    # TODO: Make configs more flexible after proof of concept
-    assert configs.max_feature_level == 7, 'max_feature_level fixed at 7'
-    assert configs.min_feature_level <= 5, 'max min_feature_level fixed at 5'
 
     configs.num_anchors = len(configs.anchor_ratios) * len(configs.anchor_scales)
 
